@@ -9,6 +9,8 @@ dependencies = [
   "uvicorn>=0.34.2",
   "pydantic>=2",
   "fastmcp>=2.12.5",
+  "python-dotenv>=1.0.0",
+  "scalekit-sdk-python>=2.3.2",
 ]
 
 [project.scripts]

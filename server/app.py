@@ -4,9 +4,11 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastmcp import FastMCP
 
+from .auth_middleware import AuthMiddleware
 from .tools import load_tools
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
@@ -89,3 +91,12 @@ combined_app = FastAPI(
     routes=[*mcp_app.routes, *app.routes],
     lifespan=mcp_app.lifespan,
 )
+
+combined_app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+)
+combined_app.add_middleware(AuthMiddleware)
