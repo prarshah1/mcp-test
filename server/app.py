@@ -1,9 +1,14 @@
 """FastMCP + FastAPI combined app (streamable HTTP for Databricks MCP Apps)."""
 
+from pathlib import Path
+
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from fastmcp import FastMCP
 
 from .tools import load_tools
+
+STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 mcp_server = FastMCP(name="simple-mcp-server")
 load_tools(mcp_server)
@@ -19,6 +24,10 @@ app = FastAPI(
 
 @app.get("/", include_in_schema=False)
 async def root():
+    # Match Databricks MCP template: serve landing page when static/index.html exists.
+    index = STATIC_DIR / "index.html"
+    if index.is_file():
+        return FileResponse(index)
     return {"message": "Simple MCP server is running", "status": "ok"}
 
 
