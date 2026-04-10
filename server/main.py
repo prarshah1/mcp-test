@@ -1,10 +1,16 @@
 """Uvicorn entry point for the MCP server (Databricks Apps default: port 8000)."""
 
 import argparse
+import logging
 
 import uvicorn
 
-from server.config import settings, validate_auth_settings
+from server.config import log_auth_configuration, settings, validate_auth_settings
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s %(name)s %(message)s",
+)
 
 
 def main() -> None:
@@ -19,6 +25,7 @@ def main() -> None:
 
     if settings.auth_enabled:
         validate_auth_settings()
+    log_auth_configuration()
 
     uvicorn.run(
         "server.app:combined_app",

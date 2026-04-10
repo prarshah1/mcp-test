@@ -1,7 +1,14 @@
-"""OAuth / Scalekit settings (see https://github.com/alejandro-ao/mcp-fastapi-auth)."""
+"""OAuth / Scalekit settings.
 
+Reference clone: temp/mcp-fastapi-auth (same env names as alejandro-ao/mcp-fastapi-auth).
+The Scalekit SDK needs SCALEKIT_ENVIRONMENT_URL + SCALEKIT_CLIENT_ID + SCALEKIT_CLIENT_SECRET.
+"""
+
+import logging
 import os
 from functools import cached_property
+
+logger = logging.getLogger("simple-mcp-server")
 
 try:
     from dotenv import load_dotenv
@@ -78,6 +85,46 @@ def validate_auth_settings() -> None:
     if not settings.scalekit_resource_metadata_url:
         missing.append("SCALEKIT_RESOURCE_METADATA_URL")
     if missing:
-        raise RuntimeError(
-            "AUTH_ENABLED requires Scalekit settings: " + ", ".join(missing)
+        lines = [
+            "Scalekit auth is enabled but the following environment variables are missing or empty:",
+            *(f"  - {name}" for name in missing),
+            "",
+            "Set them in your Databricks App env or in a local .env file (see .env.example).",
+            "Required Scalekit values: environment URL, client ID, client secret, audience, metadata URL.",
+            "Variables:",
+            "  SCALEKIT_ENVIRONMENT_URL — Scalekit environment / issuer URL",
+            "  SCALEKIT_CLIENT_ID — OAuth client ID from Scalekit",
+            "  SCALEKIT_CLIENT_SECRET — OAuth client secret (paired with client ID)",
+            "  SCALEKIT_AUDIENCE_NAME — token audience (resource identifier)",
+            "  SCALEKIT_RESOURCE_METADATA_URL — full URL to /.well-known/oauth-protected-resource/mcp",
+        ]
+        raise RuntimeError("\n".join(lines))
+
+
+def log_auth_configuration() -> None:
+    """
+    Explain how Scalekit is configured at startup (mirrors temp/mcp-fastapi-auth flow:
+    set environment URL, client id, secret, then audience + metadata URL).
+    """
+    if not settings.auth_enabled:
+        logger.info(
+            "Auth is disabled. To require Bearer tokens, set all Scalekit variables "
+            "in .env (copy from .env.example) or Databricks App env — start with "
+            "SCALEKIT_ENVIRONMENT_URL, SCALEKIT_CLIENT_ID, SCALEKIT_CLIENT_SECRET, "
+            "then SCALEKIT_AUDIENCE_NAME and SCALEKIT_RESOURCE_METADATA_URL. "
+            "See temp/mcp-fastapi-auth/readme.md for dashboard steps."
         )
+        return
+
+    cid = settings.scalekit_client_id
+    cid_preview = (cid[:8] + "…") if len(cid) > 8 else cid or "(empty)"
+    logger.info(
+        "Scalekit auth enabled: token validation will use "
+        "SCALEKIT_ENVIRONMENT_URL=%s, SCALEKIT_CLIENT_ID=%s, SCALEKIT_CLIENT_SECRET=********",
+        settings.scalekit_environment_url or "(missing — should not happen after validate)",
+        cid_preview,
+    )
+    logger.info(
+        "Also using SCALEKIT_AUDIENCE_NAME and SCALEKIT_RESOURCE_METADATA_URL for JWT checks "
+        "and WWW-Authenticate (see .env.example)."
+    )

@@ -1,5 +1,9 @@
-"""FastMCP + FastAPI combined app (streamable HTTP for Databricks MCP Apps)."""
+"""FastMCP + FastAPI combined app (streamable HTTP for Databricks MCP Apps).
 
+OAuth metadata shape aligns with github.com/alejandro-ao/mcp-fastapi-auth (see temp/ clone).
+"""
+
+import json
 import os
 from pathlib import Path
 
@@ -16,26 +20,36 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 def _oauth_protected_resource_metadata() -> dict:
     """
-    OAuth 2.0 Protected Resource Metadata (RFC 9728-style) for Scalekit / MCP clients.
+    OAuth 2.0 Protected Resource Metadata for MCP discovery.
 
-    Override via env (comma-separated lists where noted):
-    - OAUTH_AUTHORIZATION_SERVERS: authorization server URLs
-    - OAUTH_RESOURCE: protected resource identifier (MCP base URL, usually with trailing /)
-    - OAUTH_RESOURCE_DOCUMENTATION: human-readable docs URL
-    - OAUTH_SCOPES_SUPPORTED: scope names
+    Same pattern as mcp-fastapi-auth: optional METADATA_JSON_RESPONSE is the full JSON string.
+    Otherwise fields are built from env. Aliases match that repo’s .env names:
+    SCALEKIT_AUTHORIZATION_SERVERS, SCALEKIT_RESOURCE_IDENTIFIER, SCALEKIT_RESOURCE_DOCS_URL.
     """
-    auth_servers_raw = os.environ.get(
-        "OAUTH_AUTHORIZATION_SERVERS",
-        "https://spa.scalekit.dev/resources/res_120336297230336514",
+    raw = os.environ.get("METADATA_JSON_RESPONSE", "").strip()
+    if raw:
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError as e:
+            raise ValueError(
+                "METADATA_JSON_RESPONSE must be valid JSON (mcp-fastapi-auth style)"
+            ) from e
+
+    auth_servers_raw = (
+        os.environ.get("OAUTH_AUTHORIZATION_SERVERS")
+        or os.environ.get("SCALEKIT_AUTHORIZATION_SERVERS")
+        or "https://spa.scalekit.dev/resources/res_120336297230336514"
     )
     authorization_servers = [s.strip() for s in auth_servers_raw.split(",") if s.strip()]
 
-    resource = os.environ.get(
-        "OAUTH_RESOURCE",
+    resource = os.environ.get("OAUTH_RESOURCE") or os.environ.get(
+        "SCALEKIT_RESOURCE_IDENTIFIER",
         "https://mcp-a1-896143009251172.aws.databricksapps.com/mcp/",
     )
     resource_documentation = os.environ.get(
-        "OAUTH_RESOURCE_DOCUMENTATION",
+        "OAUTH_RESOURCE_DOCUMENTATION"
+    ) or os.environ.get(
+        "SCALEKIT_RESOURCE_DOCS_URL",
         "https://mcp-a1-896143009251172.aws.databricksapps.com/mcp/docs",
     )
     scopes_raw = os.environ.get("OAUTH_SCOPES_SUPPORTED", "health:read")
