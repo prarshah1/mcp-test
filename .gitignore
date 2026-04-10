@@ -4,10 +4,11 @@ __pycache__/
 *$py.class
 
 .venv/
-
+.env
 # C extensions
 *.so
-
+.idea/*
+.idea/
 # Distribution / packaging
 .Python
 build/
@@ -209,3 +210,4 @@ __marimo__/
 
 # Local reference clones (e.g. github.com/alejandro-ao/mcp-fastapi-auth)
 temp/
+.idea/mcp_auth.iml
