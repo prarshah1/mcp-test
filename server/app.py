@@ -1,13 +1,15 @@
-"""FastMCP + FastAPI combined app (streamable HTTP for Databricks MCP Apps).
+"""FastMCP + FastAPI for Databricks Apps (streamable HTTP MCP).
 
-OAuth metadata shape aligns with github.com/alejandro-ao/mcp-fastapi-auth (see temp/ clone).
+Google and other logins are configured in the Scalekit dashboard; this process only serves
+MCP and validates Bearer tokens (see auth_middleware + scalekit-sdk). Resource URLs must come
+from environment variables for your Databricks app host — do not rely on localhost.
 """
 
 import json
 import os
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastmcp import FastMCP
@@ -20,39 +22,45 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 def _oauth_protected_resource_metadata() -> dict:
     """
-    OAuth 2.0 Protected Resource Metadata for MCP discovery.
-
-    Same pattern as mcp-fastapi-auth: optional METADATA_JSON_RESPONSE is the full JSON string.
-    Otherwise fields are built from env. Aliases match that repo’s .env names:
-    SCALEKIT_AUTHORIZATION_SERVERS, SCALEKIT_RESOURCE_IDENTIFIER, SCALEKIT_RESOURCE_DOCS_URL.
+    OAuth protected-resource metadata (RFC-style) for MCP clients.
+    Uses the same env vars as temp/mcp-fastapi-auth / Scalekit — set hosts to your
+    Databricks app URL, e.g. https://<id>.aws.databricksapps.com
     """
     raw = os.environ.get("METADATA_JSON_RESPONSE", "").strip()
     if raw:
         try:
             return json.loads(raw)
         except json.JSONDecodeError as e:
-            raise ValueError(
-                "METADATA_JSON_RESPONSE must be valid JSON (mcp-fastapi-auth style)"
-            ) from e
+            raise ValueError("METADATA_JSON_RESPONSE must be valid JSON") from e
 
     auth_servers_raw = (
         os.environ.get("OAUTH_AUTHORIZATION_SERVERS")
-        or os.environ.get("SCALEKIT_AUTHORIZATION_SERVERS")
-        or "https://spa.scalekit.dev/resources/res_120336297230336514"
-    )
+        or os.environ.get("SCALEKIT_AUTHORIZATION_SERVERS", "")
+    ).strip()
+    if not auth_servers_raw:
+        raise ValueError(
+            "Set SCALEKIT_AUTHORIZATION_SERVERS to your Scalekit authorization server URL(s)."
+        )
+
     authorization_servers = [s.strip() for s in auth_servers_raw.split(",") if s.strip()]
 
-    resource = os.environ.get("OAUTH_RESOURCE") or os.environ.get(
-        "SCALEKIT_RESOURCE_IDENTIFIER",
-        "https://mcp-a1-896143009251172.aws.databricksapps.com/mcp/",
-    )
-    resource_documentation = os.environ.get(
-        "OAUTH_RESOURCE_DOCUMENTATION"
-    ) or os.environ.get(
-        "SCALEKIT_RESOURCE_DOCS_URL",
-        "https://mcp-a1-896143009251172.aws.databricksapps.com/mcp/docs",
-    )
-    scopes_raw = os.environ.get("OAUTH_SCOPES_SUPPORTED", "health:read")
+    resource = (
+        os.environ.get("OAUTH_RESOURCE") or os.environ.get("SCALEKIT_RESOURCE_IDENTIFIER", "")
+    ).strip()
+    if not resource:
+        raise ValueError(
+            "Set SCALEKIT_RESOURCE_IDENTIFIER to your MCP resource URL on Databricks "
+            "(e.g. https://<app>.aws.databricksapps.com/mcp/)."
+        )
+
+    resource_documentation = (
+        os.environ.get("OAUTH_RESOURCE_DOCUMENTATION")
+        or os.environ.get("SCALEKIT_RESOURCE_DOCS_URL", "")
+    ).strip()
+    if not resource_documentation:
+        resource_documentation = f"{resource.rstrip('/')}/docs"
+
+    scopes_raw = os.environ.get("OAUTH_SCOPES_SUPPORTED", "search:read")
     scopes_supported = [s.strip() for s in scopes_raw.split(",") if s.strip()]
 
     return {
@@ -70,7 +78,7 @@ mcp_app = mcp_server.http_app()
 
 app = FastAPI(
     title="Simple MCP Server",
-    description="Minimal tools for Databricks Apps",
+    description="MCP on Databricks Apps with Scalekit Bearer auth",
     version="0.1.0",
     lifespan=mcp_app.lifespan,
 )
@@ -78,26 +86,27 @@ app = FastAPI(
 
 @app.get("/", include_in_schema=False)
 async def root():
-    # Match Databricks MCP template: serve landing page when static/index.html exists.
     index = STATIC_DIR / "index.html"
     if index.is_file():
         return FileResponse(index)
-    return {"message": "Simple MCP server is running", "status": "ok"}
+    return {"service": "mcp", "deployment": "databricks"}
 
 
 @app.get("/health", include_in_schema=False)
 async def http_health():
-    # HTTP-only liveness; MCP clients can still use the `health` tool.
     return {
         "status": "healthy",
-        "message": "Simple MCP server is operational.",
+        "message": "MCP server is operational.",
     }
 
 
 @app.get("/.well-known/oauth-protected-resource/mcp", include_in_schema=False)
 async def oauth_protected_resource_mcp():
-    """Scalekit (and similar) metadata discovery — HTTP GET, JSON body."""
-    return _oauth_protected_resource_metadata()
+    """OAuth discovery for MCP clients (authorization_servers → Scalekit, including Google)."""
+    try:
+        return _oauth_protected_resource_metadata()
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
 
 
 combined_app = FastAPI(

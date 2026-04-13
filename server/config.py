@@ -63,7 +63,7 @@ class Settings:
 
     @property
     def scalekit_tool_call_scopes(self) -> list[str]:
-        raw = os.environ.get("SCALEKIT_TOOL_CALL_SCOPES", "health:read")
+        raw = os.environ.get("SCALEKIT_TOOL_CALL_SCOPES", "search:read")
         return [s.strip() for s in raw.split(",") if s.strip()]
 
 
@@ -108,11 +108,9 @@ def log_auth_configuration() -> None:
     """
     if not settings.auth_enabled:
         logger.info(
-            "Auth is disabled. To require Bearer tokens, set all Scalekit variables "
-            "in .env (copy from .env.example) or Databricks App env — start with "
-            "SCALEKIT_ENVIRONMENT_URL, SCALEKIT_CLIENT_ID, SCALEKIT_CLIENT_SECRET, "
-            "then SCALEKIT_AUDIENCE_NAME and SCALEKIT_RESOURCE_METADATA_URL. "
-            "See temp/mcp-fastapi-auth/readme.md for dashboard steps."
+            "Auth is disabled. For Databricks deployment with Google via Scalekit, set "
+            "SCALEKIT_* variables on the app and enable AUTH (see .env.example). "
+            "Reference: temp/mcp-fastapi-auth."
         )
         return
 
@@ -125,6 +123,6 @@ def log_auth_configuration() -> None:
         cid_preview,
     )
     logger.info(
-        "Also using SCALEKIT_AUDIENCE_NAME and SCALEKIT_RESOURCE_METADATA_URL for JWT checks "
-        "and WWW-Authenticate (see .env.example)."
+        "Using SCALEKIT_AUDIENCE_NAME and SCALEKIT_RESOURCE_METADATA_URL for JWT validation "
+        "and WWW-Authenticate (Databricks app URL in metadata)."
     )

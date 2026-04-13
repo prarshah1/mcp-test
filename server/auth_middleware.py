@@ -40,6 +40,8 @@ def _is_public_route(request: Request) -> bool:
         return True
     if path == "/health":
         return True
+    if path == "/favicon.ico":
+        return True
     if path == "/" and request.method == "GET":
         return True
     return False
@@ -48,6 +50,10 @@ def _is_public_route(request: Request) -> bool:
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         if not settings.auth_enabled:
+            return await call_next(request)
+
+        # CORS preflight must not require Bearer (browser sends no Authorization on OPTIONS).
+        if request.method == "OPTIONS":
             return await call_next(request)
 
         if _is_public_route(request):
